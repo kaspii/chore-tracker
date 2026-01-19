@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#3B82F6">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <title>Cleaning Tasks</title>
+  <link rel="manifest" href="manifest.json">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@babel/standalone/babel.min.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    // Firebase configuration - YOU NEED TO REPLACE THIS WITH YOUR OWN
+    const firebaseConfig = {
+        apiKey: "AIzaSyAD5e1HimKsCRqOPPUYEDzFW4iC5eLEUP8",
+        authDomain: "chore-tracker-28aac.firebaseapp.com",
+        databaseURL: "https://chore-tracker-28aac-default-rtdb.firebaseio.com",
+        projectId: "chore-tracker-28aac",
+        storageBucket: "chore-tracker-28aac.firebasestorage.app",
+        messagingSenderId: "243193335376",
+        appId: "1:243193335376:web:f3d716211b914aa8304b55"
+    };
+
+    // Initialize Firebase
+    let db;
+    try {
+      if (!firebase.apps.length) {
+        firebase.initializeApp(firebaseConfig);
+      }
+      db = firebase.database();
+    } catch (error) {
+      console.error("Firebase initialization error:", error);
+    }
+
+    // Lucide icons as SVG components
+    const Check = () => (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <polyline points="20 6 9 17 4 12"></polyline>
+      </svg>
+    );
+
+    const Plus = () => (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <line x1="12" y1="5" x2="12" y2="19"></line>
+        <line x1="5" y1="12" x2="19" y2="12"></line>
+      </svg>
+    );
+
+    const Trash = () => (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <polyline points="3 6 5 6 21 6"></polyline>
+        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+      </svg>
+    );
+
+    const User = () => (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+        <circle cx="12" cy="7" r="4"></circle>
+      </svg>
+    );
+
+    function App() {
+      const [tasks, setTasks] = useState([]);
+      const [newTask, setNewTask] = useState('');
+      const [currentUser, setCurrentUser] = useState('User 1');
+      const [loading, setLoading] = useState(true);
+      const [error, setError] = useState(null);
+
+      useEffect(() => {
+        if (!db) {
+          setError("Firebase not configured. Please add your Firebase config.");
+          setLoading(false);
+          return;
+        }
+
+        const tasksRef = db.ref('tasks');
+        
+        tasksRef.on('value', (snapshot) => {
+          const data = snapshot.val();
+          if (data) {
+            const tasksArray = Object.keys(data).map(key => ({
+              id: key,
+              ...data[key]
+            }));
+            setTasks(tasksArray.sort((a, b) => b.createdAt - a.createdAt));
+          } else {
+            setTasks([]);
+          }
+          setLoading(false);
+        });
+
+        return () => tasksRef.off();
+      }, []);
+
+      const addTask = () => {
+        if (newTask.trim() && db) {
+          const tasksRef = db.ref('tasks');
+          const newTaskRef = tasksRef.push();
+          newTaskRef.set({
+            text: newTask,
+            completed: false,
+            assignedTo: currentUser,
+            createdAt: Date.now(),
+            completedBy: null,
+            completedAt: null
+          });
+          setNewTask('');
+        }
+      };
+
+      const toggleTask = (taskId, task) => {
+        if (db) {
+          const isNowCompleted = !task.completed;
+          db.ref(`tasks/${taskId}`).update({
+            completed: isNowCompleted,
+            completedBy: isNowCompleted ? currentUser : null,
+            completedAt: isNowCompleted ? Date.now() : null
+          });
+        }
+      };
+
+      const deleteTask = (taskId) => {
+        if (db) {
+          db.ref(`tasks/${taskId}`).remove();
+        }
+      };
+
+      const getStats = () => {
+        const user1Tasks = tasks.filter(t => t.assignedTo === 'User 1');
+        const user2Tasks = tasks.filter(t => t.assignedTo === 'User 2');
+        const user1Completed = user1Tasks.filter(t => t.completed).length;
+        const user2Completed = user2Tasks.filter(t => t.completed).length;
+        
+        return {
+          user1: { total: user1Tasks.length, completed: user1Completed },
+          user2: { total: user2Tasks.length, completed: user2Completed }
+        };
+      };
+
+      const stats = getStats();
+      const activeTasks = tasks.filter(t => !t.completed);
+      const completedTasks = tasks.filter(t => t.completed);
+
+      if (loading) {
+        return (
+          <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+            <div className="text-lg text-gray-600">Loading tasks...</div>
+          </div>
+        );
+      }
+
+      if (error) {
+        return (
+          <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-lg p-6 max-w-md">
+              <h2 className="text-xl font-bold text-red-600 mb-2">Configuration Required</h2>
+              <p className="text-gray-700">{error}</p>
+              <p className="text-sm text-gray-600 mt-4">Check the setup instructions in the index.html file.</p>
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4 pb-20">
+          <div className="max-w-2xl mx-auto">
+            <div className="bg-white rounded-2xl shadow-lg p-6 mb-4">
+              <h1 className="text-3xl font-bold text-gray-800 mb-4">Cleaning Tasks</h1>
+              
+              <div className="flex gap-2 mb-4">
+                <button
+                  onClick={() => setCurrentUser('User 1')}
+                  className={`flex-1 py-2 px-4 rounded-lg font-medium transition ${
+                    currentUser === 'User 1'
+                      ? 'bg-blue-500 text-white'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  <span className="inline-flex items-center gap-2">
+                    <User />
+                    User 1
+                  </span>
+                </button>
+                <button
+                  onClick={() => setCurrentUser('User 2')}
+                  className={`flex-1 py-2 px-4 rounded-lg font-medium transition ${
+                    currentUser === 'User 2'
+                      ? 'bg-indigo-500 text-white'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  <span className="inline-flex items-center gap-2">
+                    <User />
+                    User 2
+                  </span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-blue-50 rounded-lg p-3">
+                  <div className="text-sm text-blue-600 font-medium">User 1</div>
+                  <div className="text-2xl font-bold text-blue-700">
+                    {stats.user1.completed}/{stats.user1.total}
+                  </div>
+                  <div className="text-xs text-blue-600">completed</div>
+                </div>
+                <div className="bg-indigo-50 rounded-lg p-3">
+                  <div className="text-sm text-indigo-600 font-medium">User 2</div>
+                  <div className="text-2xl font-bold text-indigo-700">
+                    {stats.user2.completed}/{stats.user2.total}
+                  </div>
+                  <div className="text-xs text-indigo-600">completed</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl shadow-lg p-4 mb-4">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newTask}
+                  onChange={(e) => setNewTask(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && addTask()}
+                  placeholder="Add a new cleaning task..."
+                  className="flex-1 px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <button
+                  onClick={addTask}
+                  className="bg-blue-500 text-white px-6 py-3 rounded-lg hover:bg-blue-600 transition"
+                >
+                  <Plus />
+                </button>
+              </div>
+              <div className="text-sm text-gray-500 mt-2">
+                Tasks will be assigned to: {currentUser}
+              </div>
+            </div>
+
+            {activeTasks.length > 0 && (
+              <div className="bg-white rounded-2xl shadow-lg p-4 mb-4">
+                <h2 className="text-lg font-semibold text-gray-700 mb-3">Active Tasks</h2>
+                <div className="space-y-2">
+                  {activeTasks.map(task => (
+                    <div
+                      key={task.id}
+                      className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition"
+                    >
+                      <button
+                        onClick={() => toggleTask(task.id, task)}
+                        className="w-6 h-6 rounded-full border-2 border-gray-300 flex items-center justify-center hover:border-green-500 transition flex-shrink-0"
+                      >
+                        {task.completed && <Check />}
+                      </button>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-gray-800">{task.text}</div>
+                        <div className="text-xs text-gray-500 mt-1">
+                          Assigned to: {task.assignedTo}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => deleteTask(task.id)}
+                        className="text-red-500 hover:text-red-700 p-2 flex-shrink-0"
+                      >
+                        <Trash />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {completedTasks.length > 0 && (
+              <div className="bg-white rounded-2xl shadow-lg p-4">
+                <h2 className="text-lg font-semibold text-gray-700 mb-3">Completed Tasks</h2>
+                <div className="space-y-2">
+                  {completedTasks.map(task => (
+                    <div
+                      key={task.id}
+                      className="flex items-center gap-3 p-3 bg-green-50 rounded-lg"
+                    >
+                      <button
+                        onClick={() => toggleTask(task.id, task)}
+                        className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0"
+                      >
+                        <Check />
+                      </button>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-gray-500 line-through">{task.text}</div>
+                        <div className="text-xs text-green-600 mt-1">
+                          Completed by: {task.completedBy}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => deleteTask(task.id)}
+                        className="text-red-500 hover:text-red-700 p-2 flex-shrink-0"
+                      >
+                        <Trash />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {tasks.length === 0 && (
+              <div className="bg-white rounded-2xl shadow-lg p-8 text-center text-gray-500">
+                No tasks yet. Add your first cleaning task above!
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.render(<App />, document.getElementById('root'));
+  </script>
+</body>
+</html>
