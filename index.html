@@ -475,7 +475,7 @@
     }
 
     // Task Item Component
-    function TaskItem({ task, onToggle, onEdit }) {
+    function TaskItem({ task, onToggle, onEdit, showOwner, isOwner }) {
       const isRecurring = task.type === 'recurring';
       const progress = isRecurring ? calculateProgress(task.lastCompleted, task.frequencyValue, task.frequencyUnit) : null;
 
@@ -505,10 +505,15 @@
             </button>
 
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-gray-800 font-medium">{task.text}</span>
                 {getDifficultyBadge()}
               </div>
+              {showOwner && (
+                <div className="text-xs text-gray-500 mt-1">
+                  {isOwner ? 'You' : task.createdBy}
+                </div>
+              )}
               {task.lastCompleted && (
                 <div className="text-xs text-gray-500 mt-1">
                   Last completed: {formatDate(task.lastCompleted)}
@@ -530,12 +535,14 @@
               )}
             </div>
 
-            <button
-              onClick={() => onEdit(task)}
-              className="text-gray-500 hover:text-gray-700 p-2 flex-shrink-0"
-            >
-              <Edit />
-            </button>
+            {(!showOwner || isOwner) && (
+              <button
+                onClick={() => onEdit(task)}
+                className="text-gray-500 hover:text-gray-700 p-2 flex-shrink-0"
+              >
+                <Edit />
+              </button>
+            )}
           </div>
         </div>
       );
@@ -639,6 +646,7 @@
       const [tasks, setTasks] = useState([]);
       const [points, setPoints] = useState(0);
       const [currentPage, setCurrentPage] = useState('tasks');
+      const [taskView, setTaskView] = useState('mine');
       const [showTaskTypeModal, setShowTaskTypeModal] = useState(false);
       const [showTaskFormModal, setShowTaskFormModal] = useState(false);
       const [selectedTaskType, setSelectedTaskType] = useState(null);
@@ -661,7 +669,7 @@
         if (!user || !db) return;
 
         const tasksRef = db.ref('tasks');
-        
+
         tasksRef.on('value', (snapshot) => {
           const data = snapshot.val();
           if (data) {
@@ -671,10 +679,9 @@
                 ...data[key]
               }))
               .filter(task => {
-                // Filter to only show this user's tasks
                 // Don't show completed one-time tasks
                 if (task.type === 'one-time' && task.completed) return false;
-                return task.createdBy === user.email;
+                return true;
               })
               .sort((a, b) => {
                 // Sort by creation time
@@ -844,25 +851,90 @@
 
             {currentPage === 'tasks' && (
               <>
-                {tasks.length > 0 ? (
-                  <div className="bg-white rounded-2xl shadow-lg p-4">
-                    <h2 className="text-lg font-semibold text-gray-700 mb-3">My Tasks</h2>
-                    <div className="space-y-2">
-                      {tasks.map(task => (
-                        <TaskItem
-                          key={task.id}
-                          task={task}
-                          onToggle={toggleTask}
-                          onEdit={handleEditTask}
-                        />
-                      ))}
+                {(() => {
+                  const filteredTasks = taskView === 'mine'
+                    ? tasks.filter(task => task.createdBy === user.email)
+                    : tasks;
+
+                  return filteredTasks.length > 0 ? (
+                    <div className="bg-white rounded-2xl shadow-lg p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <h2 className="text-lg font-semibold text-gray-700">
+                          {taskView === 'mine' ? 'My Tasks' : "Everyone's Tasks"}
+                        </h2>
+                        <div className="flex bg-gray-100 rounded-lg p-1">
+                          <button
+                            onClick={() => setTaskView('mine')}
+                            className={`px-3 py-1 text-sm rounded-md transition ${
+                              taskView === 'mine'
+                                ? 'bg-white shadow text-gray-800'
+                                : 'text-gray-500 hover:text-gray-700'
+                            }`}
+                          >
+                            Mine
+                          </button>
+                          <button
+                            onClick={() => setTaskView('everyone')}
+                            className={`px-3 py-1 text-sm rounded-md transition ${
+                              taskView === 'everyone'
+                                ? 'bg-white shadow text-gray-800'
+                                : 'text-gray-500 hover:text-gray-700'
+                            }`}
+                          >
+                            Everyone
+                          </button>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        {filteredTasks.map(task => (
+                          <TaskItem
+                            key={task.id}
+                            task={task}
+                            onToggle={toggleTask}
+                            onEdit={handleEditTask}
+                            showOwner={taskView === 'everyone'}
+                            isOwner={task.createdBy === user.email}
+                          />
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                ) : (
-                  <div className="bg-white rounded-2xl shadow-lg p-8 text-center text-gray-500">
-                    No tasks yet. Tap the + button to get started!
-                  </div>
-                )}
+                  ) : (
+                    <div className="bg-white rounded-2xl shadow-lg p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <h2 className="text-lg font-semibold text-gray-700">
+                          {taskView === 'mine' ? 'My Tasks' : "Everyone's Tasks"}
+                        </h2>
+                        <div className="flex bg-gray-100 rounded-lg p-1">
+                          <button
+                            onClick={() => setTaskView('mine')}
+                            className={`px-3 py-1 text-sm rounded-md transition ${
+                              taskView === 'mine'
+                                ? 'bg-white shadow text-gray-800'
+                                : 'text-gray-500 hover:text-gray-700'
+                            }`}
+                          >
+                            Mine
+                          </button>
+                          <button
+                            onClick={() => setTaskView('everyone')}
+                            className={`px-3 py-1 text-sm rounded-md transition ${
+                              taskView === 'everyone'
+                                ? 'bg-white shadow text-gray-800'
+                                : 'text-gray-500 hover:text-gray-700'
+                            }`}
+                          >
+                            Everyone
+                          </button>
+                        </div>
+                      </div>
+                      <div className="text-center text-gray-500 py-4">
+                        {taskView === 'mine'
+                          ? "No tasks yet. Tap the + button to get started!"
+                          : "No tasks from anyone yet."}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 <div className="sticky bottom-4 flex justify-end mt-4">
                   <button
