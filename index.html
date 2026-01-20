@@ -139,6 +139,65 @@
       }
       return email;
     };
+
+    // Generate a consistent color based on a string (email)
+    const getAvatarColor = (str) => {
+      if (!str) return 'bg-gray-400';
+      const colors = [
+        'bg-red-400', 'bg-orange-400', 'bg-amber-400', 'bg-yellow-400',
+        'bg-lime-400', 'bg-green-400', 'bg-emerald-400', 'bg-teal-400',
+        'bg-cyan-400', 'bg-sky-400', 'bg-blue-400', 'bg-indigo-400',
+        'bg-violet-400', 'bg-purple-400', 'bg-fuchsia-400', 'bg-pink-400',
+      ];
+      let hash = 0;
+      for (let i = 0; i < str.length; i++) {
+        hash = str.charCodeAt(i) + ((hash << 5) - hash);
+      }
+      return colors[Math.abs(hash) % colors.length];
+    };
+
+    // Get initials from profile
+    const getInitials = (email, profiles) => {
+      if (!email) return null;
+      const userKey = email.replace(/[.#$[\]]/g, '_');
+      const profile = profiles[userKey];
+      if (profile && (profile.firstName || profile.lastName)) {
+        const first = profile.firstName ? profile.firstName[0].toUpperCase() : '';
+        const last = profile.lastName ? profile.lastName[0].toUpperCase() : '';
+        return first + last || first || last;
+      }
+      return null;
+    };
+
+    // Avatar component
+    function Avatar({ email, profiles, size = 'md' }) {
+      const initials = getInitials(email, profiles);
+      const bgColor = getAvatarColor(email);
+
+      const sizeClasses = {
+        sm: 'w-6 h-6 text-xs',
+        md: 'w-8 h-8 text-sm',
+        lg: 'w-12 h-12 text-base',
+      };
+
+      if (initials) {
+        return (
+          <div className={`${sizeClasses[size]} ${bgColor} rounded-full flex items-center justify-center text-white font-medium`}>
+            {initials}
+          </div>
+        );
+      }
+
+      // Fallback to User icon
+      return (
+        <div className={`${sizeClasses[size]} ${bgColor} rounded-full flex items-center justify-center text-white`}>
+          <svg width={size === 'sm' ? 14 : size === 'md' ? 16 : 20} height={size === 'sm' ? 14 : size === 'md' ? 16 : 20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+            <circle cx="12" cy="7" r="4"></circle>
+          </svg>
+        </div>
+      );
+    }
     const formatDate = (timestamp) => {
       if (!timestamp) return null;
       const date = new Date(timestamp);
@@ -564,7 +623,7 @@
     }
 
     // Profile Modal
-    function ProfileModal({ onClose, currentProfile, userEmail, onSave, onLogout }) {
+    function ProfileModal({ onClose, currentProfile, userEmail, profiles, onSave, onLogout }) {
       const [isEditing, setIsEditing] = useState(false);
       const [firstName, setFirstName] = useState(currentProfile?.firstName || '');
       const [lastName, setLastName] = useState(currentProfile?.lastName || '');
@@ -644,9 +703,7 @@
             ) : (
               <div className="space-y-4">
                 <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg">
-                  <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                    <User />
-                  </div>
+                  <Avatar email={userEmail} profiles={profiles} size="lg" />
                   <div className="flex-1 min-w-0">
                     {displayName ? (
                       <>
@@ -682,7 +739,7 @@
     }
 
     // Task Item Component
-    function TaskItem({ task, onToggle, onEdit, showOwner, isOwner, ownerName }) {
+    function TaskItem({ task, onToggle, onEdit, showOwner, isOwner, ownerName, profiles }) {
       const isRecurring = task.type === 'recurring';
       const progress = isRecurring ? calculateProgress(task.lastCompleted, task.frequencyValue, task.frequencyUnit) : null;
 
@@ -716,17 +773,12 @@
                 <span className="text-gray-800 font-medium">{task.text}</span>
                 {getDifficultyBadge()}
               </div>
-              {showOwner && (
-                <div className="text-xs text-gray-500 mt-1">
-                  {isOwner ? 'You' : ownerName}
-                </div>
-              )}
               {task.lastCompleted && (
                 <div className="text-xs text-gray-500 mt-1">
                   Last completed: {formatDate(task.lastCompleted)}
                 </div>
               )}
-              
+
               {isRecurring && (
                 <div className="mt-2">
                   <div className={`w-full rounded-full h-2 ${progress <= 0 ? 'bg-red-100' : 'bg-gray-200'}`}>
@@ -742,7 +794,13 @@
               )}
             </div>
 
-            {(!showOwner || isOwner) && (
+            {showOwner && (
+              <div className="flex-shrink-0" title={isOwner ? 'You' : ownerName}>
+                <Avatar email={task.createdBy} profiles={profiles} size="sm" />
+              </div>
+            )}
+
+            {!showOwner && (
               <button
                 onClick={() => onEdit(task)}
                 className="text-gray-500 hover:text-gray-700 p-2 flex-shrink-0"
@@ -825,9 +883,7 @@
                   key={entry.email}
                   className={`flex items-center gap-3 p-3 rounded-lg ${isCurrentUser ? 'bg-blue-50 border-2 border-blue-200' : 'bg-gray-50'}`}
                 >
-                  <div className={`w-8 h-8 rounded-full ${rankBg} ${rankText} flex items-center justify-center font-bold text-sm`}>
-                    {rank}
-                  </div>
+                  <Avatar email={entry.email} profiles={profiles} size="md" />
                   <div className="flex-1 min-w-0">
                     <div className={`font-medium truncate ${isCurrentUser ? 'text-blue-800' : 'text-gray-800'}`}>
                       {getDisplayName(entry.email, profiles)}
@@ -1040,10 +1096,10 @@
                 <h1 className="text-3xl font-bold text-gray-800">Chore Tracker</h1>
                 <button
                   onClick={() => setShowProfileModal(true)}
-                  className="flex items-center gap-2 text-gray-600 hover:text-gray-800 transition"
+                  className="hover:opacity-80 transition"
                   title="Profile"
                 >
-                  <User />
+                  <Avatar email={user.email} profiles={profiles} size="md" />
                 </button>
               </div>
 
@@ -1111,6 +1167,7 @@
                             onEdit={handleEditTask}
                             showOwner={false}
                             isOwner={true}
+                            profiles={profiles}
                           />
                         ))}
                       </div>
@@ -1172,6 +1229,7 @@
                             showOwner={taskView === 'everyone'}
                             isOwner={task.createdBy === user.email}
                             ownerName={getDisplayName(task.createdBy, profiles)}
+                            profiles={profiles}
                           />
                         ))}
                       </div>
@@ -1257,6 +1315,7 @@
               onClose={() => setShowProfileModal(false)}
               currentProfile={getCurrentUserProfile()}
               userEmail={user.email}
+              profiles={profiles}
               onSave={handleSaveProfile}
               onLogout={handleLogout}
             />
