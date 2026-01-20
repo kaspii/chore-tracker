@@ -274,11 +274,22 @@
       );
     }
 
+    // Helper to get points for difficulty
+    const getPointsForDifficulty = (difficulty) => {
+      switch (difficulty) {
+        case 'easy': return 1;
+        case 'medium': return 2;
+        case 'hard': return 3;
+        default: return 1;
+      }
+    };
+
     // Task Form Modal
     function TaskFormModal({ type, onClose, onSubmit, onDelete, existingTask }) {
       const [taskName, setTaskName] = useState(existingTask?.text || '');
       const [frequencyValue, setFrequencyValue] = useState(existingTask?.frequencyValue || 1);
       const [frequencyUnit, setFrequencyUnit] = useState(existingTask?.frequencyUnit || 'days');
+      const [difficulty, setDifficulty] = useState(existingTask?.difficulty || 'easy');
 
       const isEditing = !!existingTask;
 
@@ -287,6 +298,7 @@
         const taskData = {
           text: taskName,
           type: type,
+          difficulty: difficulty,
         };
 
         if (type === 'recurring') {
@@ -361,6 +373,50 @@
                 </div>
               )}
 
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Difficulty
+                </label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setDifficulty('easy')}
+                    className={`flex-1 py-2 px-3 rounded-lg border-2 transition ${
+                      difficulty === 'easy'
+                        ? 'border-green-500 bg-green-50 text-green-700'
+                        : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="font-medium">Easy</div>
+                    <div className="text-xs">1 pt</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDifficulty('medium')}
+                    className={`flex-1 py-2 px-3 rounded-lg border-2 transition ${
+                      difficulty === 'medium'
+                        ? 'border-yellow-500 bg-yellow-50 text-yellow-700'
+                        : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="font-medium">Medium</div>
+                    <div className="text-xs">2 pts</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDifficulty('hard')}
+                    className={`flex-1 py-2 px-3 rounded-lg border-2 transition ${
+                      difficulty === 'hard'
+                        ? 'border-red-500 bg-red-50 text-red-700'
+                        : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="font-medium">Hard</div>
+                    <div className="text-xs">3 pts</div>
+                  </button>
+                </div>
+              </div>
+
               <div className="flex gap-2">
                 <button
                   type="button"
@@ -401,11 +457,21 @@
     function TaskItem({ task, onToggle, onEdit }) {
       const isRecurring = task.type === 'recurring';
       const progress = isRecurring ? calculateProgress(task.lastCompleted, task.frequencyValue, task.frequencyUnit) : null;
-      
+
       let progressColor = 'bg-blue-500';
       if (progress !== null && progress < 20) {
         progressColor = 'bg-red-500';
       }
+
+      const getDifficultyBadge = () => {
+        const difficulty = task.difficulty || 'easy';
+        const points = getPointsForDifficulty(difficulty);
+        return (
+          <span className="text-xs px-2 py-0.5 rounded-full bg-blue-200 text-blue-600">
+            {points} pt{points > 1 ? 's' : ''}
+          </span>
+        );
+      };
 
       return (
         <div className="bg-gray-50 rounded-lg p-3 hover:bg-gray-100 transition">
@@ -416,9 +482,12 @@
             >
               {task.completed && <Check />}
             </button>
-            
+
             <div className="flex-1 min-w-0">
-              <div className="text-gray-800 font-medium">{task.text}</div>
+              <div className="flex items-center gap-2">
+                <span className="text-gray-800 font-medium">{task.text}</span>
+                {getDifficultyBadge()}
+              </div>
               {task.lastCompleted && (
                 <div className="text-xs text-gray-500 mt-1">
                   Last completed: {formatDate(task.lastCompleted)}
@@ -456,6 +525,7 @@
       const [user, setUser] = useState(null);
       const [loading, setLoading] = useState(true);
       const [tasks, setTasks] = useState([]);
+      const [points, setPoints] = useState(0);
       const [showTaskTypeModal, setShowTaskTypeModal] = useState(false);
       const [showTaskFormModal, setShowTaskFormModal] = useState(false);
       const [selectedTaskType, setSelectedTaskType] = useState(null);
@@ -504,6 +574,20 @@
         });
 
         return () => tasksRef.off();
+      }, [user]);
+
+      useEffect(() => {
+        if (!user || !db) return;
+
+        // Use a sanitized version of email as the key
+        const userKey = user.email.replace(/[.#$[\]]/g, '_');
+        const pointsRef = db.ref(`userPoints/${userKey}`);
+
+        pointsRef.on('value', (snapshot) => {
+          setPoints(snapshot.val() || 0);
+        });
+
+        return () => pointsRef.off();
       }, [user]);
 
       const handleLogout = async () => {
@@ -562,6 +646,11 @@
 
       const toggleTask = (taskId, task) => {
         if (db && user) {
+          // Award points based on difficulty
+          const earnedPoints = getPointsForDifficulty(task.difficulty);
+          const userKey = user.email.replace(/[.#$[\]]/g, '_');
+          db.ref(`userPoints/${userKey}`).set(points + earnedPoints);
+
           if (task.type === 'one-time') {
             // One-time tasks just get marked as completed
             db.ref(`tasks/${taskId}`).update({
@@ -604,8 +693,14 @@
                 </button>
               </div>
 
-              <div className="text-sm text-gray-600">
-                Signed in as: {user.email}
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-gray-600">
+                  Signed in as: {user.email}
+                </div>
+                <div className="flex items-center gap-1 bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full">
+                  <span className="font-bold">{points}</span>
+                  <span className="text-sm">pts</span>
+                </div>
               </div>
             </div>
 
