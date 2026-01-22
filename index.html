@@ -1148,6 +1148,12 @@
                     if (task.type !== 'recurring') return false;
                     const progress = calculateProgress(task.lastCompleted, task.frequencyValue, task.frequencyUnit);
                     return progress <= 0;
+                  })
+                  // Sort by most overdue first (lowest progress = most overdue)
+                  .sort((a, b) => {
+                    const progressA = calculateProgress(a.lastCompleted, a.frequencyValue, a.frequencyUnit);
+                    const progressB = calculateProgress(b.lastCompleted, b.frequencyValue, b.frequencyUnit);
+                    return progressA - progressB;
                   });
 
                   if (overdueTasks.length === 0) return null;
@@ -1184,10 +1190,22 @@
                     return progress <= 0;
                   };
 
+                  // Helper to get sort priority for a task (lower = should appear first)
+                  const getTaskSortPriority = (task) => {
+                    if (task.type === 'recurring') {
+                      // For recurring tasks, sort by progress (lowest progress = closest to overdue)
+                      return calculateProgress(task.lastCompleted, task.frequencyValue, task.frequencyUnit);
+                    }
+                    // Non-recurring tasks go after recurring, sorted by creation time (newest first)
+                    return 1000 - (task.createdAt || 0) / 1e15;
+                  };
+
                   const filteredTasks = (taskView === 'mine'
                     ? tasks.filter(task => task.createdBy === user.email)
                     : tasks
-                  ).filter(task => !isOverdue(task));
+                  ).filter(task => !isOverdue(task))
+                  // Sort by priority (recurring tasks by progress, then others by creation time)
+                  .sort((a, b) => getTaskSortPriority(a) - getTaskSortPriority(b));
 
                   return filteredTasks.length > 0 ? (
                     <div className="bg-white rounded-2xl shadow-lg p-4">
