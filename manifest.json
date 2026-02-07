@@ -2,7 +2,7 @@
   "name": "Cleaning Tasks",
   "short_name": "CleanTasks",
   "description": "Shared cleaning task tracker",
-  "start_url": "/",
+  "start_url": "/chore-tracker/",
   "display": "standalone",
   "background_color": "#3B82F6",
   "theme_color": "#3B82F6",
